@@ -10,6 +10,7 @@ El sistema requiere tres fuentes de información para ejecutarse:
 
 1. **Archivo de Cabeceras (Header View):** Un reporte exportado de Oracle (formato tabular CSV o TXT) que contiene la información general del proveedor (Número de proveedor, nombre, tipo, estado global, prioridad global y país de origen configurado en un campo adicional DFF).
 2. **Archivo de Sitios de Pago (PaySite View):** Un reporte exportado de Oracle (formato tabular CSV o TXT) que contiene la información a nivel de sucursales o sitios individuales (Estado del sitio, país del sitio, prioridad del sitio, fechas de inactividad, líneas de dirección y el código de comisión bancaria ATTRIBUTE6).
+   * *Nota sobre nombres de columnas:* Para garantizar la flexibilidad de los reportes de exportación de Oracle, el motor de validación detecta automáticamente si las columnas de ambos archivos de entrada contienen algún prefijo común (por ejemplo, `HDR_` en el archivo de cabeceras y `SITE_` en el archivo de sitios) y lo remueve dinámicamente en memoria. Esto permite que la lógica interna de validación se mantenga inalterada sin importar los cambios de prefijos en las exportaciones de datos.
 3. **Matriz de Reglas (Parámetros.xlsx):** Un archivo Excel gestionado por el negocio que sirve como base de conocimiento para las validaciones. Contiene cinco pestañas:
    * **Hoja1 (Reglas por tipo):** Parámetros obligatorios (intereses, fletes, prioridades) según el tipo de proveedor (Empleado, Fideicomiso, etc.).
    * **Geographic_Mapping (Traducción):** Relación para convertir los nombres largos de países en Oracle a códigos ISO de 2 letras.
@@ -24,8 +25,8 @@ El sistema requiere tres fuentes de información para ejecutarse:
 El motor debe iterar sobre cada registro y realizar los siguientes controles sin codificar reglas fijas (todo debe ser dinámico, consumido desde la Matriz de Reglas):
 
 ### Control 1: Integridad y Relación de Datos
-* **Descripción:** Comprobar que cada registro del archivo de sitios tenga su correspondiente registro padre en el archivo de cabeceras mediante el identificador único del proveedor (`VENDOR_ID`).
-* **Severidad si falla:** CRÍTICO.
+* **Descripción:** Comprobar que cada registro del archivo de sitios tenga su correspondiente registro padre en el archivo de cabeceras mediante el identificador único del proveedor (`VENDOR_ID`). *Nota:* Si la cabecera está ausente, puede deberse a actualizaciones de lotes incrementales donde solo se actualizó el sitio y no la cabecera, por lo que se reporta como una advertencia para investigación.
+* **Severidad si falla:** ADVERTENCIA.
 
 ### Control 2: Obligatoriedad de Campos Clave
 * **Descripción:** Verificar que campos obligatorios a nivel de cabecera como el "Tipo de Proveedor" (`VENDOR_TYPE_LOOKUP_CODE`) y a nivel de sitios de pago (`PAY`) como la "Comisión Bancaria" (`ATTRIBUTE6`) no se encuentren vacíos o en blanco.
@@ -44,7 +45,7 @@ El motor debe iterar sobre cada registro y realizar los siguientes controles sin
 * **Descripción:** Traducir el país del DFF de cabecera a código ISO. 
   * Para proveedores de tipo Servicios o Fideicomisos, el país declarado en sus sitios de compras (PUR) debe ser idéntico al país ISO de su cabecera.
   * Para proveedores de tipo Empleados o Reclamos, el país declarado en sus sitios de pagos (PAY) debe ser idéntico al país ISO de su cabecera.
-* **Severidad si falla:** ERROR.
+* **Severidad si falla:** ADVERTENCIA.
 
 ### Control 5: Consistencia de Estado Activo e Inactividad
 * **Descripción:** Si un proveedor global se encuentra habilitado (`ENABLED_FLAG` = 'Y'), emitir una alerta si alguno de sus sitios individuales tiene configurada una fecha de baja o inactividad (`INACTIVE_DATE`).

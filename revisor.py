@@ -22,15 +22,35 @@ def cargar_csv_con_autodetect(ruta_archivo, sep='\t'):
             continue
     return pd.read_csv(ruta_archivo, sep=sep)
 
-def generar_reporte_html(lista_excepciones, nombre_salida):
+def remover_prefijo_comun(df):
     """
-    Genera un informe HTML autocontenido y con diseno premium con
-    las desviaciones detectadas para facilitar su lectura en navegadores.
+    Detecta si las columnas tienen un prefijo comun (ej: HDR_ o SITE_)
+    y lo elimina para que el resto del script funcione con nombres estandarizados.
+    """
+    columnas_clave = ['VENDOR_ID', 'VENDOR_NUMBER', 'VENDOR_SITE_CODE']
+    prefix = ""
+    for col in df.columns:
+        for clave in columnas_clave:
+            if col.endswith(clave) and col != clave:
+                prefix = col[:-len(clave)]
+                break
+        if prefix:
+            break
+            
+    if prefix:
+        df.columns = [col[len(prefix):] if col.startswith(prefix) else col for col in df.columns]
+    return df
+
+def generar_reporte_html(lista_excepciones, lista_correctos, nombre_salida):
+    """
+    Genera un informe HTML autocontenido y con diseño premium con
+    las desviaciones detectadas y los registros correctos para facilitar su lectura en navegadores.
     """
     from datetime import datetime
     fecha_actual = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    filas = []
+    # Filas para desviaciones
+    filas_ex = []
     for exc in lista_excepciones:
         riesgo = str(exc.get('NIVEL_RIESGO', '')).upper()
         if riesgo == 'CRÍTICO':
@@ -49,18 +69,34 @@ def generar_reporte_html(lista_excepciones, nombre_salida):
                 <td><span class="value-oracle">{exc.get('VALOR_ORACLE', '')}</span></td>
                 <td>{exc.get('REGLA_ESPERADA', '')}</td>
                 <td>{exc.get('TIPO_CONTROL', '')}</td>
-                <td><span class="badge {{badge_class}}">{riesgo}</span></td>
+                <td><span class="badge {badge_class}">{riesgo}</span></td>
             </tr>"""
-        filas.append(fila)
-        
-    filas_html = "\n".join(filas)
+        filas_ex.append(fila)
+    filas_ex_html = "\n".join(filas_ex) if filas_ex else '<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 30px;">No se detectaron desviaciones o alertas en los datos.</td></tr>'
+    
+    # Filas para registros correctos
+    filas_ok = []
+    for ok in lista_correctos:
+        fila = f"""
+            <tr>
+                <td><strong>{ok.get('VENDOR_NUMBER', '')}</strong></td>
+                <td>{ok.get('VENDOR_NAME', '')}</td>
+                <td><span class="site-code">{ok.get('VENDOR_SITE_CODE', '')}</span></td>
+                <td><code>{ok.get('CAMPO_AUDITADO', '')}</code></td>
+                <td><span class="value-oracle">{ok.get('VALOR_ORACLE', '')}</span></td>
+                <td>{ok.get('REGLA_ESPERADA', '')}</td>
+                <td>{ok.get('TIPO_CONTROL', '')}</td>
+                <td><span class="badge badge-ok">OK</span></td>
+            </tr>"""
+        filas_ok.append(fila)
+    filas_ok_html = "\n".join(filas_ok) if filas_ok else '<tr><td colspan="8" style="text-align: center; color: #64748b; padding: 30px;">No hay registros validados correctamente.</td></tr>'
     
     html_template = f"""<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reporte de Auditoria de Proveedores - Oracle EBS</title>
+    <title>Reporte de Auditoría de Proveedores - Oracle EBS</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         
@@ -127,6 +163,43 @@ def generar_reporte_html(lista_excepciones, nombre_salida):
             font-weight: 700;
             color: #0f172a;
         }}
+        
+        /* Tabs Styling */
+        .tabs-header {{
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 12px;
+        }}
+        .tab-btn {{
+            background: none;
+            border: none;
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #64748b;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            outline: none;
+        }}
+        .tab-btn:hover {{
+            color: #0f172a;
+            background-color: #f1f5f9;
+        }}
+        .tab-btn.active {{
+            color: #2563eb;
+            background-color: #eff6ff;
+            box-shadow: 0 1px 2px rgba(37, 99, 235, 0.05);
+        }}
+        .tab-content {{
+            display: none;
+        }}
+        .tab-content.active {{
+            display: block;
+        }}
+        
         .table-responsive {{
             overflow-x: auto;
             border-radius: 8px;
@@ -202,13 +275,18 @@ def generar_reporte_html(lista_excepciones, nombre_salida):
             color: #b45309;
             border: 1px solid #fde68a;
         }}
+        .badge-ok {{
+            background-color: #f0fdf4;
+            color: #166534;
+            border: 1px solid #dcfce7;
+        }}
     </style>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>Auditoría de Proveedores Oracle EBS</h1>
-            <div class="summary-badge">Reporte de Desviaciones</div>
+            <div class="summary-badge">Resultado de Validación</div>
         </header>
         
         <div class="meta-grid">
@@ -220,28 +298,75 @@ def generar_reporte_html(lista_excepciones, nombre_salida):
                 <div class="meta-card-title">Desviaciones Detectadas</div>
                 <div class="meta-card-value" style="color: #ef4444;">{len(lista_excepciones)}</div>
             </div>
+            <div class="meta-card">
+                <div class="meta-card-title">Registros Correctos</div>
+                <div class="meta-card-value" style="color: #10b981;">{len(lista_correctos)}</div>
+            </div>
         </div>
         
-        <div class="table-responsive">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Proveedor No.</th>
-                        <th>Nombre Proveedor</th>
-                        <th>Sitio</th>
-                        <th>Campo Auditado</th>
-                        <th>Valor en Oracle</th>
-                        <th>Regla Esperada</th>
-                        <th>Tipo Control</th>
-                        <th>Nivel Riesgo</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {filas_html}
-                </tbody>
-            </table>
+        <div class="tabs-header">
+            <button class="tab-btn active" onclick="switchTab('excepciones')">Desviaciones y Alertas ({len(lista_excepciones)})</button>
+            <button class="tab-btn" onclick="switchTab('correctos')">Registros Correctos ({len(lista_correctos)})</button>
+        </div>
+        
+        <div id="excepciones" class="tab-content active">
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Proveedor No.</th>
+                            <th>Nombre Proveedor</th>
+                            <th>Sitio</th>
+                            <th>Campo Auditado</th>
+                            <th>Valor en Oracle</th>
+                            <th>Regla Esperada</th>
+                            <th>Tipo Control</th>
+                            <th>Nivel Riesgo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filas_ex_html}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div id="correctos" class="tab-content">
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Proveedor No.</th>
+                            <th>Nombre Proveedor</th>
+                            <th>Sitio</th>
+                            <th>Campo Auditado</th>
+                            <th>Valor en Oracle</th>
+                            <th>Regla Esperada</th>
+                            <th>Tipo Control</th>
+                            <th>Nivel Riesgo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filas_ok_html}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
+
+    <script>
+        function switchTab(tabId) {{
+            // Desactivar todas las pestañas y contenidos
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            
+            // Activar la pestaña y contenido seleccionados
+            document.getElementById(tabId).classList.add('active');
+            
+            // Activar el botón correcto
+            event.currentTarget.classList.add('active');
+        }}
+    </script>
 </body>
 </html>
 """
@@ -385,6 +510,11 @@ def ejecutar_auditoria_ebs(archivo_header, archivo_paysite):
     try:
         df_header = cargar_csv_con_autodetect(archivo_header)
         df_paysite = cargar_csv_con_autodetect(archivo_paysite)
+        
+        # Remover prefijos de columnas si existen para estandarizar los nombres
+        df_header = remover_prefijo_comun(df_header)
+        df_paysite = remover_prefijo_comun(df_paysite)
+        
         print("Reportes de Oracle cargados correctamente.")
         print(f"Cabeceras: {os.path.basename(archivo_header)} ({len(df_header)} registros)")
         print(f"Sitios: {os.path.basename(archivo_paysite)} ({len(df_paysite)} registros)")
@@ -405,9 +535,9 @@ def ejecutar_auditoria_ebs(archivo_header, archivo_paysite):
                 'VENDOR_SITE_CODE': 'GLOBAL',
                 'CAMPO_AUDITADO': 'VENDOR_ID',
                 'VALOR_ORACLE': str(vendor_id),
-                'REGLA_ESPERADA': 'El sitio debe tener un registro padre en el Header',
+                'REGLA_ESPERADA': 'El sitio tiene un registro en PaySite pero no existe su correspondiente Cabecera (Header)',
                 'TIPO_CONTROL': 'Integridad de Datos',
-                'NIVEL_RIESGO': 'CRÍTICO'
+                'NIVEL_RIESGO': 'ADVERTENCIA'
             })
             continue
 
@@ -516,7 +646,7 @@ def ejecutar_auditoria_ebs(archivo_header, archivo_paysite):
                     'VENDOR_NUMBER': v_number, 'VENDOR_NAME': v_name, 'VENDOR_SITE_CODE': 'PUR Site',
                     'CAMPO_AUDITADO': 'COUNTRY vs PAIS_DFF', 'VALOR_ORACLE': f'PUR={pais_pur_iso}, DFF_MATRIZ={pais_dff_iso}',
                     'REGLA_ESPERADA': 'El país del sitio de compras (PUR) debe coincidir con el DFF traducido',
-                    'TIPO_CONTROL': 'Consistencia de Valores', 'NIVEL_RIESGO': 'ERROR'
+                    'TIPO_CONTROL': 'Consistencia de Valores', 'NIVEL_RIESGO': 'ADVERTENCIA'
                 })
         
         elif v_type in ['Employees', 'Claims'] and pais_pay_iso:
@@ -525,7 +655,7 @@ def ejecutar_auditoria_ebs(archivo_header, archivo_paysite):
                     'VENDOR_NUMBER': v_number, 'VENDOR_NAME': v_name, 'VENDOR_SITE_CODE': 'PAY Site',
                     'CAMPO_AUDITADO': 'COUNTRY vs PAIS_DFF', 'VALOR_ORACLE': f'PAY={pais_pay_iso}, DFF_MATRIZ={pais_dff_iso}',
                     'REGLA_ESPERADA': 'El país del sitio de pagos (PAY) debe coincidir con el DFF traducido',
-                    'TIPO_CONTROL': 'Consistencia de Valores', 'NIVEL_RIESGO': 'ERROR'
+                    'TIPO_CONTROL': 'Consistencia de Valores', 'NIVEL_RIESGO': 'ADVERTENCIA'
                 })
 
         # Validaciones especificas a nivel de sitios
@@ -676,26 +806,110 @@ def ejecutar_auditoria_ebs(archivo_header, archivo_paysite):
                                 'TIPO_CONTROL': 'Formato Texto (Banking Retail)', 'NIVEL_RIESGO': 'ERROR'
                             })
 
-    # Escritura del archivo de resultados
-    df_resultado = pd.DataFrame(lista_excepciones)
+    # Generar lista de registros correctos
+    lista_correctos = []
     
-    if not df_resultado.empty:
-        nombre_salida_excel = 'Reporte_Auditoria_EBS_Proveedores.xlsx'
-        nombre_salida_html = 'Reporte_Auditoria_EBS_Proveedores.html'
+    # Primero, identificar qué entidades fallaron
+    failed_headers = set()
+    failed_sites = set()
+    
+    for exc in lista_excepciones:
+        v_num = str(exc.get('VENDOR_NUMBER', '')).strip()
+        s_code = str(exc.get('VENDOR_SITE_CODE', '')).strip()
+        if s_code == 'HEADER':
+            failed_headers.add(v_num)
+        elif s_code == 'GLOBAL':
+            failed_headers.add(v_num)
+            failed_sites.add((v_num, 'ALL'))
+        elif s_code in ['PUR Site', 'PAY Site']:
+            failed_sites.add((v_num, s_code))
+        else:
+            failed_sites.add((v_num, s_code))
+
+    # Ahora, recorrer todos los registros cargados para encontrar los que no fallaron
+    for vendor_id, sitios in df_paysite.groupby('VENDOR_ID'):
+        header_row = df_header[df_header['VENDOR_ID'] == vendor_id]
+        if header_row.empty:
+            continue
+            
+        v_number = str(header_row['VENDOR_NUMBER'].values[0]).strip()
+        v_name = header_row['VENDOR_NAME'].values[0]
         
-        # Generar reporte Excel
+        # Verificar Cabecera
+        if v_number not in failed_headers:
+            lista_correctos.append({
+                'VENDOR_NUMBER': v_number,
+                'VENDOR_NAME': v_name,
+                'VENDOR_SITE_CODE': 'HEADER',
+                'CAMPO_AUDITADO': 'TODOS',
+                'VALOR_ORACLE': '-',
+                'REGLA_ESPERADA': 'Cumple con todos los parámetros de cabecera',
+                'TIPO_CONTROL': 'Validación Correcta',
+                'NIVEL_RIESGO': 'OK'
+            })
+            
+        # Verificar cada sitio de este proveedor
+        for _, fila_sitio in sitios.iterrows():
+            s_code = str(fila_sitio['VENDOR_SITE_CODE']).strip()
+            s_status = fila_sitio['SITE_STATUS']
+            
+            # Verificar si este sitio específico falló o si falló por tipo genérico
+            sitio_fallo = (
+                (v_number, s_code) in failed_sites or
+                (v_number, 'ALL') in failed_sites or
+                (s_status == 'PUR' and (v_number, 'PUR Site') in failed_sites) or
+                (s_status == 'PAY' and (v_number, 'PAY Site') in failed_sites)
+            )
+            
+            if not sitio_fallo:
+                lista_correctos.append({
+                    'VENDOR_NUMBER': v_number,
+                    'VENDOR_NAME': v_name,
+                    'VENDOR_SITE_CODE': s_code,
+                    'CAMPO_AUDITADO': 'TODOS',
+                    'VALOR_ORACLE': '-',
+                    'REGLA_ESPERADA': 'Cumple con todos los parámetros del sitio',
+                    'TIPO_CONTROL': 'Validación Correcta',
+                    'NIVEL_RIESGO': 'OK'
+                })
+
+    # Escritura del archivo de resultados
+    columnas_reporte = [
+        'VENDOR_NUMBER', 'VENDOR_NAME', 'VENDOR_SITE_CODE', 
+        'CAMPO_AUDITADO', 'VALOR_ORACLE', 'REGLA_ESPERADA', 
+        'TIPO_CONTROL', 'NIVEL_RIESGO'
+    ]
+    
+    if not lista_excepciones:
+        df_resultado = pd.DataFrame(columns=columnas_reporte)
+    else:
+        df_resultado = pd.DataFrame(lista_excepciones)
+        
+    if not lista_correctos:
+        df_correctos = pd.DataFrame(columns=columnas_reporte)
+    else:
+        df_correctos = pd.DataFrame(lista_correctos)
+    
+    nombre_salida_excel = 'Reporte_Auditoria_EBS_Proveedores.xlsx'
+    nombre_salida_html = 'Reporte_Auditoria_EBS_Proveedores.html'
+    
+    # Generar reporte Excel con múltiples hojas
+    try:
+        with pd.ExcelWriter(nombre_salida_excel, engine='openpyxl') as writer:
+            df_resultado.to_excel(writer, sheet_name='Desviaciones', index=False)
+            df_correctos.to_excel(writer, sheet_name='Validados_Ok', index=False)
+    except Exception as e:
+        print(f"Error al escribir el archivo Excel de salida con openpyxl: {e}")
         df_resultado.to_excel(nombre_salida_excel, index=False)
         
-        # Generar reporte HTML
-        generar_reporte_html(lista_excepciones, nombre_salida_html)
-        
-        print("\nProceso finalizado.")
-        print(f"Se detectaron {len(df_resultado)} desviaciones o alertas en los datos.")
-        print(f"Reporte Excel generado en: {os.path.abspath(nombre_salida_excel)}")
-        print(f"Reporte HTML generado en: {os.path.abspath(nombre_salida_html)}")
-    else:
-        print("\nProceso finalizado.")
-        print("No se encontraron desviaciones en los datos analizados.")
+    # Generar reporte HTML
+    generar_reporte_html(lista_excepciones, lista_correctos, nombre_salida_html)
+    
+    print("\nProceso finalizado.")
+    print(f"Se detectaron {len(lista_excepciones)} desviaciones o alertas en los datos.")
+    print(f"Se validaron {len(lista_correctos)} registros sin observaciones.")
+    print(f"Reporte Excel generado en: {os.path.abspath(nombre_salida_excel)}")
+    print(f"Reporte HTML generado en: {os.path.abspath(nombre_salida_html)}")
 
 if __name__ == "__main__":
     import sys
