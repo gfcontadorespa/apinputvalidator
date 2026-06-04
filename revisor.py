@@ -419,23 +419,24 @@ def ejecutar_auditoria_ebs(archivo_header, archivo_paysite):
                 'PAYMENT_PRIORITY': row.get('PAYMENT_PRIORITY'),
                 'TERMS_ID': row.get('TERMS_ID'),
                 'EXCLUDE_FREIGHT_FROM_DISCOUNT': row.get('EXCLUDE_FREIGHT_FROM_DISCOUNT'),
-                'AUTO_CALCULATE_INTEREST_FLAG': row.get('AUTO_CALCULATE_INTEREST_FLAG')
+                'AUTO_CALCULATE_INTEREST_FLAG': row.get('AUTO_CALCULATE_INTEREST_FLAG'),
+                'HEADER_END_DATE_ACTIVE': row.get('HEADER_END_DATE_ACTIVE')
             }
         print(f"Reglas de tipo de proveedor cargadas: {len(mapeo_reglas)} registros.")
     except Exception as e:
         print(f"Advertencia al leer Hoja1: {e}")
         mapeo_reglas = {
             'employees': {
-                'PAYMENT_PRIORITY': 'Y', 'TERMS_ID': 'Y', 'EXCLUDE_FREIGHT_FROM_DISCOUNT': 'N', 'AUTO_CALCULATE_INTEREST_FLAG': 'N'
+                'PAYMENT_PRIORITY': 'Y', 'TERMS_ID': 'Y', 'EXCLUDE_FREIGHT_FROM_DISCOUNT': 'N', 'AUTO_CALCULATE_INTEREST_FLAG': 'N', 'HEADER_END_DATE_ACTIVE': 'N'
             },
             'claims': {
-                'PAYMENT_PRIORITY': 'Y', 'TERMS_ID': 'Y', 'EXCLUDE_FREIGHT_FROM_DISCOUNT': 'N', 'AUTO_CALCULATE_INTEREST_FLAG': 'N'
+                'PAYMENT_PRIORITY': 'Y', 'TERMS_ID': 'Y', 'EXCLUDE_FREIGHT_FROM_DISCOUNT': 'N', 'AUTO_CALCULATE_INTEREST_FLAG': 'N', 'HEADER_END_DATE_ACTIVE': 'Y'
             },
             'trust': {
-                'PAYMENT_PRIORITY': 'Y', 'TERMS_ID': 'Y', 'EXCLUDE_FREIGHT_FROM_DISCOUNT': 'N', 'AUTO_CALCULATE_INTEREST_FLAG': 'N'
+                'PAYMENT_PRIORITY': 'Y', 'TERMS_ID': 'Y', 'EXCLUDE_FREIGHT_FROM_DISCOUNT': 'N', 'AUTO_CALCULATE_INTEREST_FLAG': 'N', 'HEADER_END_DATE_ACTIVE': 'Y'
             },
             'miscellaneous services': {
-                'PAYMENT_PRIORITY': 'Y', 'TERMS_ID': 'Y', 'EXCLUDE_FREIGHT_FROM_DISCOUNT': 'Y', 'AUTO_CALCULATE_INTEREST_FLAG': 'Y'
+                'PAYMENT_PRIORITY': 'Y', 'TERMS_ID': 'Y', 'EXCLUDE_FREIGHT_FROM_DISCOUNT': 'Y', 'AUTO_CALCULATE_INTEREST_FLAG': 'Y', 'HEADER_END_DATE_ACTIVE': 'N'
             }
         }
 
@@ -629,6 +630,17 @@ def ejecutar_auditoria_ebs(archivo_header, archivo_paysite):
                     lista_excepciones.append({
                         'VENDOR_NUMBER': v_number, 'VENDOR_NAME': v_name, 'VENDOR_SITE_CODE': 'HEADER',
                         'CAMPO_AUDITADO': 'PAYMENT_PRIORITY', 'VALOR_ORACLE': str(header_priority),
+                        'REGLA_ESPERADA': f'Requerido (Y) para {v_type} según la matriz de parámetros',
+                        'TIPO_CONTROL': 'Paramétrico (Invoice Mgt)', 'NIVEL_RIESGO': 'ERROR'
+                    })
+
+            ref_end_date = regla.get('HEADER_END_DATE_ACTIVE')
+            if ref_end_date == 'Y':
+                actual_end_date = header_row['HEADER_END_DATE_ACTIVE'].values[0]
+                if pd.isna(actual_end_date) or str(actual_end_date).strip() == '' or str(actual_end_date).strip().lower() == 'nan':
+                    lista_excepciones.append({
+                        'VENDOR_NUMBER': v_number, 'VENDOR_NAME': v_name, 'VENDOR_SITE_CODE': 'HEADER',
+                        'CAMPO_AUDITADO': 'HEADER_END_DATE_ACTIVE', 'VALOR_ORACLE': str(actual_end_date),
                         'REGLA_ESPERADA': f'Requerido (Y) para {v_type} según la matriz de parámetros',
                         'TIPO_CONTROL': 'Paramétrico (Invoice Mgt)', 'NIVEL_RIESGO': 'ERROR'
                     })
