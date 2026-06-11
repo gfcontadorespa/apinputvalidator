@@ -27,6 +27,19 @@ class AuditoriaValidator:
         self.format_rules = parametros.get('format_rules', [])
         self.mapeo_terminos = parametros.get('mapeo_terminos', {})
         
+        # Pre-indexar reglas geograficas por pais (O(1) en vez de O(n))
+        self.geo_rules_por_pais = {}
+        for r in self.geo_rules:
+            pais = r['COUNTRY_ISO']
+            if pais not in self.geo_rules_por_pais:
+                self.geo_rules_por_pais[pais] = []
+            self.geo_rules_por_pais[pais].append(r)
+        
+        # Pre-indexar sitios por VENDOR_ID (evita filtrar DataFrame en cada iteracion)
+        self.paysite_por_vendor = {
+            vid: grupo for vid, grupo in self.df_paysite.groupby('VENDOR_ID')
+        } if not self.df_paysite.empty else {}
+        
         self.lista_excepciones = []
         self.lista_correctos = []
     
@@ -97,7 +110,7 @@ class AuditoriaValidator:
             v_type = str(header_row['VENDOR_TYPE_LOOKUP_CODE']).strip()
             v_type_lower = v_type.lower()
             
-            sitios = self.df_paysite[self.df_paysite['VENDOR_ID'] == vendor_id]
+            sitios = self.paysite_por_vendor.get(vendor_id, pd.DataFrame())
             
             if sitios.empty:
                 # Sin ningun sitio - aplica para todos los tipos
@@ -388,10 +401,11 @@ class AuditoriaValidator:
         attr6 = str(fila_sitio['ATTRIBUTE6']).strip()
         attr6_upper = attr6.upper()
         
-        # Buscar reglas geográficas coincidentes
-        reglas_pais = [r for r in self.geo_rules if r['COUNTRY_ISO'] == s_country_upper]
+        # Buscar reglas geográficas coincidentes (indice pre-construido O(1))
+        reglas_pais = self.geo_rules_por_pais.get(s_country_upper, [])
         if not reglas_pais:
-            reglas_pais = [r for r in self.geo_rules if r['COUNTRY_ISO'] in ['DEFAULT', 'OTRO']]
+            reglas_pais = self.geo_rules_por_pais.get('DEFAULT', []) + \
+                          self.geo_rules_por_pais.get('OTRO', [])
         
         regla_coincidente = None
         for r in reglas_pais:
