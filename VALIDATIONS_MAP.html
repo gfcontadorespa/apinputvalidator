@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Mapa de Validaciones - Auditoría Oracle EBS</title>
+<style>
+  :root {
+    --header-color: #1a73e8;
+    --paysite-color: #34a853;
+    --cross-color: #ea4335;
+    --geo-color: #fbbc04;
+    --vtype-color: #9c27b0;
+    --warn-bg: #fff3cd;
+    --err-bg: #f8d7da;
+    --crit-bg: #dc3545;
+    --ok-bg: #d4edda;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f7fa; color: #333; line-height: 1.6; }
+  
+  .container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; }
+  
+  h1 { text-align: center; font-size: 2em; margin-bottom: 8px; color: #1a1a2e; }
+  .subtitle { text-align: center; color: #666; margin-bottom: 40px; font-size: 1.05em; }
+  
+  /* ===== DIAGRAMA ===== */
+  .diagram-section { background: #fff; border-radius: 16px; padding: 40px; margin-bottom: 40px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+  .diagram-section h2 { text-align: center; margin-bottom: 30px; color: #1a1a2e; }
+  
+  .diagram-wrapper { display: flex; align-items: stretch; gap: 0; position: relative; min-height: 520px; }
+  
+  /* Columnas */
+  .diagram-col { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px; }
+  .diagram-col.middle { flex: 0 0 180px; justify-content: center; }
+  
+  .col-title { font-weight: 700; font-size: 1.1em; padding: 10px 20px; border-radius: 8px; color: #fff; margin-bottom: 20px; text-align: center; width: 100%; }
+  .col-title.header { background: var(--header-color); }
+  .col-title.paysite { background: var(--paysite-color); }
+  .col-title.cross { background: var(--cross-color); }
+  
+  /* Cajas de columnas */
+  .field-box { background: #f8f9fc; border: 2px solid #e0e4ea; border-radius: 10px; padding: 12px 16px; margin: 6px 0; width: 100%; font-size: .88em; text-align: center; transition: .2s; }
+  .field-box:hover { border-color: #1a73e8; box-shadow: 0 2px 8px rgba(26,115,232,.15); }
+  .field-box .field-name { font-weight: 600; color: #1a1a2e; }
+  .field-box .field-desc { font-size: .82em; color: #666; margin-top: 2px; }
+  
+  /* Flechas entre columnas */
+  .arrow-group { display: flex; flex-direction: column; align-items: center; gap: 18px; padding: 0 10px; }
+  .arrow-item { display: flex; align-items: center; gap: 8px; font-size: .82em; padding: 6px 12px; border-radius: 20px; white-space: nowrap; }
+  .arrow-item .arrow { font-size: 1.4em; }
+  .arrow-item .tag { padding: 2px 8px; border-radius: 10px; font-weight: 600; font-size: .75em; color: #fff; }
+  .tag.crit { background: var(--crit-bg); }
+  .tag.error { background: var(--cross-color); }
+  .tag.warn { background: #fbbc04; color: #333; }
+  
+  /* Cajas de validación central */
+  .validation-center { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+  .val-box { padding: 12px 14px; border-radius: 10px; font-size: .82em; border-left: 4px solid; text-align: center; }
+  .val-box.cross-h { border-left-color: var(--header-color); background: #e8f0fe; }
+  .val-box.cross-p { border-left-color: var(--paysite-color); background: #e6f4ea; }
+  .val-box.cross-both { border-left-color: var(--cross-color); background: #fce8e6; }
+  .val-box .val-name { font-weight: 600; }
+  .val-box .val-severity { font-size: .75em; padding: 1px 6px; border-radius: 8px; color: #fff; display: inline-block; margin-top: 3px; }
+  
+  /* ===== LEYENDA ===== */
+  .leyenda { display: flex; justify-content: center; gap: 30px; flex-wrap: wrap; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e4ea; }
+  .leyenda-item { display: flex; align-items: center; gap: 8px; font-size: .85em; }
+  .leyenda-item .dot { width: 14px; height: 14px; border-radius: 50%; display: inline-block; }
+  
+  /* ===== TABLA DE VALIDACIONES ===== */
+  .validations-section { background: #fff; border-radius: 16px; padding: 40px; margin-bottom: 40px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+  .validations-section h2 { margin-bottom: 8px; color: #1a1a2e; }
+  .validations-section > p { color: #666; margin-bottom: 24px; }
+  
+  .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 24px; }
+  .filter-btn { padding: 6px 16px; border: 2px solid #ddd; border-radius: 20px; background: #fff; cursor: pointer; font-size: .85em; transition: .2s; }
+  .filter-btn:hover { border-color: #1a73e8; }
+  .filter-btn.active { border-color: #1a73e8; background: #e8f0fe; font-weight: 600; }
+  
+  table { width: 100%; border-collapse: collapse; font-size: .88em; }
+  thead th { background: #f0f2f5; padding: 12px 14px; text-align: left; font-weight: 600; color: #1a1a2e; position: sticky; top: 0; }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid #eef0f4; vertical-align: top; }
+  tbody tr:hover { background: #f8f9fc; }
+  
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-weight: 600; font-size: .78em; color: #fff; }
+  .badge.crit { background: var(--crit-bg); }
+  .badge.error { background: var(--cross-color); }
+  .badge.warn { background: #fbbc04; color: #333; }
+  .badge.ok { background: var(--ok-bg); color: #155724; }
+  
+  .type-tag { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: .76em; font-weight: 500; margin-right: 4px; }
+  .type-tag.header { background: #e8f0fe; color: var(--header-color); }
+  .type-tag.paysite { background: #e6f4ea; color: var(--paysite-color); }
+  .type-tag.cross { background: #fce8e6; color: var(--cross-color); }
+  .type-tag.geo { background: #fff8e1; color: #f9a825; }
+  .type-tag.vtype { background: #f3e5f5; color: var(--vtype-color); }
+  .type-tag.missing { background: #f5f5f5; color: #999; border: 1px dashed #ccc; }
+  
+  .val-id { font-weight: 600; color: #1a73e8; font-size: .82em; }
+  
+  .status-implemented { color: #34a853; font-weight: 500; }
+  .status-missing { color: #ea4335; font-weight: 500; }
+  
+  /* ===== SUGERENCIAS ===== */
+  .suggestions-section { background: #fff; border-radius: 16px; padding: 40px; margin-bottom: 40px; box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+  .suggestions-section h2 { margin-bottom: 8px; color: #1a1a2e; }
+  .suggestions-section > p { color: #666; margin-bottom: 24px; }
+  
+  .suggestion-card { background: #f8f9fc; border-left: 4px solid var(--vtype-color); border-radius: 10px; padding: 16px 20px; margin-bottom: 16px; }
+  .suggestion-card .sug-title { font-weight: 600; color: var(--vtype-color); }
+  .suggestion-card .sug-desc { color: #555; margin-top: 6px; font-size: .9em; }
+  .suggestion-card .sug-why { color: #888; font-size: .82em; margin-top: 6px; font-style: italic; }
+  
+  /* ===== FOOTER ===== */
+  .footer { text-align: center; color: #999; font-size: .82em; padding: 20px; }
+
+  @media (max-width: 900px) {
+    .diagram-wrapper { flex-direction: column; }
+    .diagram-col.middle { flex: 1; }
+    .arrow-group { flex-direction: row; flex-wrap: wrap; justify-content: center; padding: 15px 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<h1>Mapa de Validaciones</h1>
+<p class="subtitle">Auditoría de Proveedores Oracle EBS — Cruce entre Header y PaySite</p>
+
+<!-- ===== DIAGRAMA ===== -->
+<div class="diagram-section">
+  <h2>Diagrama de Cruce de Validaciones</h2>
+  
+  <div class="diagram-wrapper">
+    <!-- Columna: Header -->
+    <div class="diagram-col">
+      <div class="col-title header">HEADER</div>
+      <div class="field-box"><div class="field-name">LAST_ACTION_VENDOR</div><div class="field-desc">Indicador C/U</div></div>
+      <div class="field-box"><div class="field-name">VENDOR_TYPE_LOOKUP_CODE</div><div class="field-desc">Tipo de proveedor</div></div>
+      <div class="field-box"><div class="field-name">PAYMENT_PRIORITY</div><div class="field-desc">Prioridad global</div></div>
+      <div class="field-box"><div class="field-name">TERMS_ID</div><div class="field-desc">Término de pago</div></div>
+      <div class="field-box"><div class="field-name">ENABLED_FLAG</div><div class="field-desc">Estado activo</div></div>
+      <div class="field-box"><div class="field-name">AUTO_CALCULATE_INTEREST_FLAG</div><div class="field-desc">Cálculo intereses</div></div>
+      <div class="field-box"><div class="field-name">EXCLUDE_FREIGHT_FROM_DISCOUNT</div><div class="field-desc">Excluir flete</div></div>
+      <div class="field-box"><div class="field-name">PAIS_DFF_ATT1</div><div class="field-desc">País (DFF)</div></div>
+      <div class="field-box"><div class="field-name">HEADER_END_DATE_ACTIVE</div><div class="field-desc">Fecha fin vigencia</div></div>
+    </div>
+    
+    <!-- Columna central: flechas / validaciones -->
+    <div class="diagram-col middle">
+      <div class="validation-center">
+        <div class="val-box cross-h">
+          <div class="val-name">V01 · V08</div>
+          <div>Validaciones de cabecera</div>
+          <span class="badge error">ERROR</span> <span class="badge crit">CRÍTICO</span>
+        </div>
+        <div class="val-box cross-both">
+          <div class="val-name">V09 · V10</div>
+          <div>Consistencia de país</div>
+          <span class="badge warn">ADVERTENCIA</span>
+        </div>
+        <div class="val-box cross-both">
+          <div class="val-name">V11 · V12</div>
+          <div>Consistencia Header ↔ Sitio</div>
+          <span class="badge error">ERROR</span>
+        </div>
+        <div class="val-box cross-both">
+          <div class="val-name">V19 · V21</div>
+          <div>Integridad creación</div>
+          <span class="badge warn">ADVERTENCIA</span>
+        </div>
+        <div class="val-box cross-p">
+          <div class="val-name">V13 · V18</div>
+          <div>Validaciones de sitio</div>
+          <span class="badge error">ERROR</span> <span class="badge warn">ADVERTENCIA</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Columna: PaySite -->
+    <div class="diagram-col">
+      <div class="col-title paysite">PAYSITE</div>
+      <div class="field-box"><div class="field-name">VENDOR_SITE_CODE</div><div class="field-desc">Código de sitio</div></div>
+      <div class="field-box"><div class="field-name">SITE_STATUS</div><div class="field-desc">PUR / PAY</div></div>
+      <div class="field-box"><div class="field-name">COUNTRY</div><div class="field-desc">País del sitio</div></div>
+      <div class="field-box"><div class="field-name">PAYMENT_PRIORITY</div><div class="field-desc">Prioridad del sitio</div></div>
+      <div class="field-box"><div class="field-name">TERMS_ID</div><div class="field-desc">Término del sitio</div></div>
+      <div class="field-box"><div class="field-name">INACTIVE_DATE</div><div class="field-desc">Fecha de baja</div></div>
+      <div class="field-box"><div class="field-name">ATTRIBUTE6</div><div class="field-desc">Comisión bancaria</div></div>
+      <div class="field-box"><div class="field-name">ADDRESS_LINE2 / L3</div><div class="field-desc">Formato bancario</div></div>
+      <div class="field-box"><div class="field-name">LAST_ACTION</div><div class="field-desc">C / M</div></div>
+    </div>
+  </div>
+  
+  <div class="leyenda">
+    <div class="leyenda-item"><span class="dot" style="background:var(--header-color)"></span> Validación solo Header</div>
+    <div class="leyenda-item"><span class="dot" style="background:var(--paysite-color)"></span> Validación solo PaySite</div>
+    <div class="leyenda-item"><span class="dot" style="background:var(--cross-color)"></span> Validación cruzada</div>
+    <div class="leyenda-item"><span class="dot" style="background:var(--geo-color)"></span> Regla geográfica</div>
+    <div class="leyenda-item"><span class="dot" style="background:var(--vtype-color)"></span> Regla por tipo</div>
+  </div>
+</div>
+
+<!-- ===== LISTA COMPLETA DE VALIDACIONES ===== -->
+<div class="validations-section">
+  <h2>Inventario Completo de Validaciones</h2>
+  <p>21 validaciones implementadas · 0 pendientes · Haz clic en los filtros para agrupar</p>
+  
+  <div class="filter-bar">
+    <button class="filter-btn active" data-filter="all">Todas (21)</button>
+    <button class="filter-btn" data-filter="header">Solo Header (8)</button>
+    <button class="filter-btn" data-filter="paysite">Solo PaySite (6)</button>
+    <button class="filter-btn" data-filter="cross">Cruce Header↔Site (4)</button>
+    <button class="filter-btn" data-filter="geo">Geográficas (4)</button>
+    <button class="filter-btn" data-filter="vtype">Por Tipo Vendor (5)</button>
+  </div>
+  
+  <div style="overflow-x:auto">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:55px">ID</th>
+        <th style="width:100px">Ámbito</th>
+        <th>Campo Auditado</th>
+        <th>Regla / Descripción</th>
+        <th style="width:100px">Severidad</th>
+        <th style="width:60px">Estado</th>
+      </tr>
+    </thead>
+    <tbody id="validations-tbody">
+      <!-- ===== HEADER ===== -->
+      <tr data-tags="header">
+        <td><span class="val-id">V01</span></td>
+        <td><span class="type-tag header">HEADER</span></td>
+        <td>VENDOR_TYPE_LOOKUP_CODE</td>
+        <td>El tipo de proveedor no debe estar en blanco</td>
+        <td><span class="badge crit">CRÍTICO</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="header geo">
+        <td><span class="val-id">V02</span></td>
+        <td><span class="type-tag header"></span><span class="type-tag geo">GEO</span></td>
+        <td>PAYMENT_PRIORITY (Header)</td>
+        <td>Si país = Panamá, la prioridad global debe ser 99, 71 o 73</td>
+        <td><span class="badge error">ERROR</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="header geo">
+        <td><span class="val-id">V03</span></td>
+        <td><span class="type-tag header"></span><span class="type-tag geo">GEO</span></td>
+        <td>PAYMENT_PRIORITY (Header)</td>
+        <td>Si país ≠ Panamá, la prioridad global debe ser 50</td>
+        <td><span class="badge error">ERROR</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="header vtype">
+        <td><span class="val-id">V04</span></td>
+        <td><span class="type-tag header"></span><span class="type-tag vtype">VTYPE</span></td>
+        <td>AUTO_CALCULATE_INTEREST_FLAG</td>
+        <td>Debe coincidir con el valor definido en la matriz para su tipo de proveedor</td>
+        <td><span class="badge error">ERROR</span> / <span class="badge warn">ADV</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="header vtype">
+        <td><span class="val-id">V05</span></td>
+        <td><span class="type-tag header"></span><span class="type-tag vtype">VTYPE</span></td>
+        <td>EXCLUDE_FREIGHT_FROM_DISCOUNT</td>
+        <td>Debe coincidir con el valor definido en la matriz para su tipo de proveedor</td>
+        <td><span class="badge error">ERROR</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="header vtype">
+        <td><span class="val-id">V06</span></td>
+        <td><span class="type-tag header"></span><span class="type-tag vtype">VTYPE</span></td>
+        <td>TERMS_ID</td>
+        <td>Si la matriz marca "Y", el término de pago es obligatorio en cabecera</td>
+        <td><span class="badge error">ERROR</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="header vtype">
+        <td><span class="val-id">V07</span></td>
+        <td><span class="type-tag header"></span><span class="type-tag vtype">VTYPE</span></td>
+        <td>PAYMENT_PRIORITY (Obligatoriedad)</td>
+        <td>Si la matriz marca "Y", la prioridad es obligatoria en cabecera</td>
+        <td><span class="badge error">ERROR</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="header vtype">
+        <td><span class="val-id">V08</span></td>
+        <td><span class="type-tag header"></span><span class="type-tag vtype">VTYPE</span></td>
+        <td>HEADER_END_DATE_ACTIVE</td>
+        <td>Si la matriz marca "Y", la fecha de fin de vigencia es obligatoria en cabecera</td>
+        <td><span class="badge error">ERROR</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      
+      <!-- ===== CRUCE ===== -->
+      <tr data-tags="cross geo">
+        <td><span class="val-id">V09</span></td>
+        <td><span class="type-tag cross">CRUCE</span><span class="type-tag geo">GEO</span></td>
+        <td>COUNTRY vs PAIS_DFF (PUR)</td>
+        <td>Para Misc Services / Trust: el país del sitio PUR debe coincidir con el DFF traducido</td>
+        <td><span class="badge warn">ADVERTENCIA</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="cross geo">
+        <td><span class="val-id">V10</span></td>
+        <td><span class="type-tag cross">CRUCE</span><span class="type-tag geo">GEO</span></td>
+        <td>COUNTRY vs PAIS_DFF (PAY)</td>
+        <td>Para Employees / Claims: el país del sitio PAY debe coincidir con el DFF traducido</td>
+        <td><span class="badge warn">ADVERTENCIA</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="cross">
+        <td><span class="val-id">V11</span></td>
+        <td><span class="type-tag cross">CRUCE</span></td>
+        <td>TERMS_ID (Consistencia)</td>
+        <td>El término de pago del sitio debe coincidir con el de la cabecera</td>
+        <td><span class="badge error">ERROR</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="cross">
+        <td><span class="val-id">V12</span></td>
+        <td><span class="type-tag cross">CRUCE</span></td>
+        <td>PAYMENT_PRIORITY (Consistencia)</td>
+        <td>La prioridad del sitio debe coincidir con la de la cabecera</td>
+        <td><span class="badge error">ERROR</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      
+      <!-- ===== PAYSITE ===== -->
+      <tr data-tags="paysite cross">
+        <td><span class="val-id">V13</span></td>
+        <td><span class="type-tag paysite">SITE</span><span class="type-tag cross">CRUCE</span></td>
+        <td>INACTIVE_DATE vs ENABLED_FLAG</td>
+        <td>Si el header está habilitado (Y) pero el sitio tiene fecha de baja → alerta</td>
+        <td><span class="badge warn">ADVERTENCIA</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="paysite geo">
+        <td><span class="val-id">V14</span></td>
+        <td><span class="type-tag paysite">SITE</span><span class="type-tag geo">GEO</span></td>
+        <td>PAYMENT_PRIORITY (Site PAY)</td>
+        <td>La prioridad del sitio PAY debe estar entre las permitidas según país y patrón</td>
+        <td><span class="badge error">ERROR</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="paysite geo">
+        <td><span class="val-id">V15</span></td>
+        <td><span class="type-tag paysite">SITE</span><span class="type-tag geo">GEO</span></td>
+        <td>ATTRIBUTE6 (Obligatoriedad)</td>
+        <td>El campo de comisión bancaria no debe estar en blanco para sitios PAY</td>
+        <td><span class="badge error">ERROR</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="paysite geo">
+        <td><span class="val-id">V16</span></td>
+        <td><span class="type-tag paysite">SITE</span><span class="type-tag geo">GEO</span></td>
+        <td>ATTRIBUTE6 (Valor esperado)</td>
+        <td>Para el país y patrón, ATTRIBUTE6 debe ser OUR o BEN según la regla geográfica</td>
+        <td><span class="badge error">ERROR</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="paysite geo">
+        <td><span class="val-id">V17</span></td>
+        <td><span class="type-tag paysite">SITE</span><span class="type-tag geo">GEO</span></td>
+        <td>VENDOR_SITE_CODE</td>
+        <td>El código del sitio PAY debe coincidir con el patrón esperado para su país</td>
+        <td><span class="badge error">ERROR</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="paysite">
+        <td><span class="val-id">V18</span></td>
+        <td><span class="type-tag paysite">SITE</span></td>
+        <td>ADDRESS_LINE2 / ADDRESS_LINE3</td>
+        <td>Debe cumplir con el formato regex definido (RUTA Y TRANSITO #, CTA#...)</td>
+        <td><span class="badge error">ERROR</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      
+      <!-- ===== INTEGRIDAD CREACIÓN ===== -->
+      <tr data-tags="cross">
+        <td><span class="val-id">V19</span></td>
+        <td><span class="type-tag cross">CRUCE</span></td>
+        <td>VENDOR_SITE_CODE (Integridad)</td>
+        <td>Header creado (LAST_ACTION_VENDOR=C) debe tener al menos 1 sitio en PaySite</td>
+        <td><span class="badge warn">ADVERTENCIA</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="cross">
+        <td><span class="val-id">V20</span></td>
+        <td><span class="type-tag cross">CRUCE</span></td>
+        <td>SITE_STATUS (PUR)</td>
+        <td>Header creado (no Employee) debe tener al menos un sitio PUR</td>
+        <td><span class="badge warn">ADVERTENCIA</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+      <tr data-tags="cross">
+        <td><span class="val-id">V21</span></td>
+        <td><span class="type-tag cross">CRUCE</span></td>
+        <td>SITE_STATUS (PAY)</td>
+        <td>Header creado (no Employee) debe tener al menos un sitio PAY</td>
+        <td><span class="badge warn">ADVERTENCIA</span></td>
+        <td><span class="status-implemented">✓</span></td>
+      </tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<!-- ===== SUGERENCIAS ===== -->
+<div class="suggestions-section">
+  <h2>Validaciones Sugeridas (no implementadas)</h2>
+  <p>Casos de validación que podrian agregarse en futuras iteraciones</p>
+  
+  <div class="suggestion-card">
+    <div class="sug-title">S01 — Consistencia EXCLUDE_FREIGHT_FROM_DISC entre Header y PaySite</div>
+    <div class="sug-desc">PaySite tiene su propia columna <code>EXCLUDE_FREIGHT_FROM_DISC</code>. Validar que coincida con la cabecera. Actualmente solo se valida contra la matriz, no contra el sitio.</div>
+    <div class="sug-why">¿Por qué?: Podria haber una configuración local del sitio que contradiga la política global del header.</div>
+  </div>
+  
+  <div class="suggestion-card">
+    <div class="sug-title">S02 — Proveedor deshabilitado (ENABLED_FLAG = N) con sitios activos sin fecha de inactividad</div>
+    <div class="sug-desc">Si el header está deshabilitado pero los sitios no tienen INACTIVE_DATE ni están marcados como inactivos, podria ser un cierre incompleto.</div>
+    <div class="sug-why">¿Por qué?: Al deshabilitar un proveedor global, los sitios deberian reflejar ese cambio (INACTIVE_DATE).</div>
+  </div>
+  
+  <div class="suggestion-card">
+    <div class="sug-title">S03 — Duplicados de VENDOR_SITE_CODE para el mismo VENDOR_ID</div>
+    <div class="sug-desc">No deberian existir dos sitios con el mismo código para un mismo proveedor. Podria indicar un error de carga o duplicación.</div>
+    <div class="sug-why">¿Por qué?: Oracle no deberia permitirlo, pero en reportes de batch/extractos podria aparecer duplicado.</div>
+  </div>
+  
+  <div class="suggestion-card">
+    <div class="sug-title">S04 — Validación de campos RUC/R&G y SS_PAT/IP en Header</div>
+    <div class="sug-desc">Estas columnas existen en el Header exportado pero no se validan. Podrian tener formato esperado según el país (RUC panameño, SSN, etc.).</div>
+    <div class="sug-why">¿Por qué?: Son campos de identificación fiscal relevantes para la auditoría.</div>
+  </div>
+  
+  <div class="suggestion-card">
+    <div class="sug-title">S05 — Employee con más de 1 sitio activo</div>
+    <div class="sug-desc">Si un Employee tiene más de un sitio, podria ser una anomalia, ya que por definición tiene un unico sitio que funciona como PUR y PAY.</div>
+    <div class="sug-why">¿Por qué?: Según la regla de negocio, Employee utiliza un solo sitio unificado.</div>
+  </div>
+  
+  <div class="suggestion-card">
+    <div class="sug-title">S06 — Diferencia entre LAST_ACTION_DATE del Header y del PaySite</div>
+    <div class="sug-desc">Si la fecha de última modificación del Header difiere significativamente de la del PaySite, podria indicar actualizaciones desincronizadas.</div>
+    <div class="sug-why">¿Por qué?: Cambios recientes en el sitio sin actualización del header (o viceversa) merecen revisión.</div>
+  </div>
+</div>
+
+<!-- ===== FOOTER ===== -->
+<div class="footer">
+  Documento generado a partir del codigo fuente · Auditoría de Proveedores Oracle EBS
+</div>
+
+</div>
+
+<script>
+// Filtros
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const filter = btn.dataset.filter;
+    document.querySelectorAll('#validations-tbody tr').forEach(row => {
+      const tags = row.dataset.tags || '';
+      if (filter === 'all' || tags.split(' ').includes(filter)) {
+        row.style.display = '';
+      } else {
+        row.style.display = 'none';
+      }
+    });
+  });
+});
+</script>
+
+</body>
+</html>
