@@ -52,12 +52,28 @@ class AuditoriaValidator:
         """
         print("\n▶ Iniciando validaciones...")
         
+        # Excluir sitios con INACTIVE_DATE ya vencida (no se auditan)
+        hoy = pd.Timestamp.now().normalize()
+        if 'INACTIVE_DATE' in self.df_paysite.columns:
+            inactive = pd.to_datetime(self.df_paysite['INACTIVE_DATE'], errors='coerce')
+            mask_activos = inactive.isna() | (inactive > hoy)
+            sitios_excluidos = (~mask_activos).sum()
+            self.df_paysite_activo = self.df_paysite[mask_activos].copy()
+            if sitios_excluidos > 0:
+                print(f"  ↻ Sitios excluidos (INACTIVE_DATE vencido): {sitios_excluidos}")
+            # Actualizar índice con datos filtrados
+            self.paysite_por_vendor = {
+                vid: grupo for vid, grupo in self.df_paysite_activo.groupby('VENDOR_ID')
+            } if not self.df_paysite_activo.empty else {}
+        else:
+            self.df_paysite_activo = self.df_paysite
+        
         # Validación cruzada entre cabeceras y sitios
         # Nota: No se valida PaySite sin Header porque Oracle EBS mantiene
         # integridad referencial a nivel BD (FK). Un PaySite siempre tiene
         # su Header correspondiente. Si por alguna razón no existe (ej.
         # exportación parcial), se omite la validación de ese vendor.
-        for vendor_id, sitios in self.df_paysite.groupby('VENDOR_ID'):
+        for vendor_id, sitios in self.df_paysite_activo.groupby('VENDOR_ID'):
             header_row = self.df_header[self.df_header['VENDOR_ID'] == vendor_id]
             
             if header_row.empty:
@@ -517,8 +533,8 @@ class AuditoriaValidator:
             else:
                 failed_sites.add((v_num, s_code))
         
-        # Recorrer todos los registros para encontrar los correctos
-        for vendor_id, sitios in self.df_paysite.groupby('VENDOR_ID'):
+        # Recorrer todos los registros activos para encontrar los correctos
+        for vendor_id, sitios in self.df_paysite_activo.groupby('VENDOR_ID'):
             header_row = self.df_header[self.df_header['VENDOR_ID'] == vendor_id]
             if header_row.empty:
                 continue
