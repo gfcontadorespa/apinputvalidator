@@ -3,8 +3,8 @@ Configuración central y constantes para auditoría de proveedores Oracle EBS
 """
 import os
 
-# Directorio base
-DIRECTORIO_SCRIPT = os.path.dirname(os.path.abspath(__file__))
+# Directorio base (raíz del proyecto, un nivel arriba de src/)
+DIRECTORIO_SCRIPT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Rutas de configuración y parámetros
 RUTA_PARAMETROS = os.path.join(DIRECTORIO_SCRIPT, 'Parámetros.xlsx')

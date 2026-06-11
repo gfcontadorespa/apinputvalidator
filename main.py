@@ -8,6 +8,9 @@ import logging
 import tkinter as tk
 from tkinter import filedialog
 
+# Asegurar que src/ esté en el path de Python
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
 from config import DIRECTORIO_SCRIPT, ARCHIVO_HEADER_EJEMPLO, ARCHIVO_PAYSITE_EJEMPLO
 from data_loader import cargar_datos_oracle
 from parameters import cargar_parametros
