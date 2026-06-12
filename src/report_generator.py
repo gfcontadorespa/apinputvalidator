@@ -58,19 +58,41 @@ class ReportGenerator:
         
         if not lista_correctos:
             df_correctos = pd.DataFrame(columns=self.columnas_reporte)
+            df_creaciones = pd.DataFrame(columns=self.columnas_reporte)
+            df_modificaciones = pd.DataFrame(columns=self.columnas_reporte)
         else:
             df_correctos = pd.DataFrame(lista_correctos)
+            
+            # Separar Creaciones y Modificaciones si existe la columna
+            if 'TIPO_ACCION' in df_correctos.columns:
+                df_creaciones = df_correctos[df_correctos['TIPO_ACCION'] == 'Creación'].copy()
+                df_modificaciones = df_correctos[df_correctos['TIPO_ACCION'] == 'Modificación'].copy()
+                # Quitar columna TIPO_ACCION de las hojas individuales
+                for df in [df_creaciones, df_modificaciones]:
+                    if 'TIPO_ACCION' in df.columns:
+                        df.drop(columns=['TIPO_ACCION'], inplace=True)
+            else:
+                df_creaciones = df_correctos.copy()
+                df_modificaciones = pd.DataFrame(columns=self.columnas_reporte)
         
         # Escribir Excel
         try:
             with pd.ExcelWriter(nombre_salida, engine='openpyxl') as writer:
                 df_excepciones.to_excel(writer, sheet_name='Desviaciones', index=False)
                 df_correctos.to_excel(writer, sheet_name='Validados_Ok', index=False)
+                if not df_creaciones.empty:
+                    df_creaciones.to_excel(writer, sheet_name='Creaciones', index=False)
+                if not df_modificaciones.empty:
+                    df_modificaciones.to_excel(writer, sheet_name='Modificaciones', index=False)
         except Exception as e:
             print(f"⚠ Openpyxl falló, usando xlsxwriter: {e}")
             with pd.ExcelWriter(nombre_salida, engine='xlsxwriter') as writer:
                 df_excepciones.to_excel(writer, sheet_name='Desviaciones', index=False)
                 df_correctos.to_excel(writer, sheet_name='Validados_Ok', index=False)
+                if not df_creaciones.empty:
+                    df_creaciones.to_excel(writer, sheet_name='Creaciones', index=False)
+                if not df_modificaciones.empty:
+                    df_modificaciones.to_excel(writer, sheet_name='Modificaciones', index=False)
     
     def _generar_html(self, lista_excepciones, lista_correctos, nombre_salida):
         """Genera reporte HTML autocontenido con diseño premium"""
@@ -80,13 +102,21 @@ class ReportGenerator:
         # Generar filas HTML para excepciones
         filas_ex_html = self._generar_filas_excepciones(lista_excepciones)
         
-        # Generar filas HTML para correctos
-        filas_ok_html = self._generar_filas_correctos(lista_correctos)
+        # Separar correctos por tipo de accion
+        creaciones = [r for r in lista_correctos if r.get('TIPO_ACCION') == 'Creación']
+        modificaciones = [r for r in lista_correctos if r.get('TIPO_ACCION') == 'Modificación']
         
-        # Template HTML
+        filas_crea_html = self._generar_filas_correctos(creaciones)
+        filas_mod_html = self._generar_filas_correctos(modificaciones)
+        
+        tiene_creaciones = len(creaciones) > 0
+        tiene_modificaciones = len(modificaciones) > 0
+        
         html_content = self._generar_template_html(
-            fecha_actual, filas_ex_html, filas_ok_html,
-            len(lista_excepciones), len(lista_correctos)
+            fecha_actual, filas_ex_html, filas_crea_html, filas_mod_html,
+            len(lista_excepciones), len(lista_correctos),
+            len(creaciones), len(modificaciones),
+            tiene_creaciones, tiene_modificaciones
         )
         
         # Escribir archivo
@@ -148,9 +178,73 @@ class ReportGenerator:
         
         return "\n".join(filas)
     
-    def _generar_template_html(self, fecha_actual, filas_ex_html, filas_ok_html,
-                              total_excepciones, total_correctos):
+    def _generar_template_html(self, fecha_actual, filas_ex_html,
+                              filas_crea_html, filas_mod_html,
+                              total_excepciones, total_correctos,
+                              total_creaciones, total_modificaciones,
+                              tiene_creaciones, tiene_modificaciones):
         """Genera el template HTML completo"""
+        
+        # Construir secciones de correctos condicionalmente
+        html_correctos = ""
+        
+        if tiene_creaciones:
+            html_correctos += f'''
+            <div class="group-section creacion">
+                <div class="group-header">
+                    <span class="group-icon">🆕</span>
+                    <span class="group-title">Creaciones ({total_creaciones})</span>
+                    <span class="group-subtitle">Proveedores creados en este lote y sus sitios</span>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Proveedor No.</th>
+                                <th>Nombre Proveedor</th>
+                                <th>Sitio</th>
+                                <th>Campo Auditado</th>
+                                <th>Valor en Oracle</th>
+                                <th>Regla Esperada</th>
+                                <th>Tipo Control</th>
+                                <th>Nivel Riesgo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filas_crea_html}
+                        </tbody>
+                    </table>
+                </div>
+            </div>'''
+        
+        if tiene_modificaciones:
+            html_correctos += f'''
+            <div class="group-section modificacion">
+                <div class="group-header">
+                    <span class="group-icon">🔄</span>
+                    <span class="group-title">Modificaciones ({total_modificaciones})</span>
+                    <span class="group-subtitle">Sitios modificados en este lote</span>
+                </div>
+                <div class="table-responsive">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Proveedor No.</th>
+                                <th>Nombre Proveedor</th>
+                                <th>Sitio</th>
+                                <th>Campo Auditado</th>
+                                <th>Valor en Oracle</th>
+                                <th>Regla Esperada</th>
+                                <th>Tipo Control</th>
+                                <th>Nivel Riesgo</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filas_mod_html}
+                        </tbody>
+                    </table>
+                </div>
+            </div>'''
         
         return f"""<!DOCTYPE html>
 <html lang="es">
@@ -341,6 +435,40 @@ class ReportGenerator:
             color: #166534;
             border: 1px solid #dcfce7;
         }}
+        
+        /* Group sections for Creaciones/Modificaciones */
+        .group-section {{
+            margin-bottom: 28px;
+        }}
+        .group-header {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 14px;
+            padding: 12px 16px;
+            border-radius: 8px;
+        }}
+        .group-section.creacion .group-header {{
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+        }}
+        .group-section.modificacion .group-header {{
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+        }}
+        .group-icon {{
+            font-size: 20px;
+        }}
+        .group-title {{
+            font-weight: 700;
+            font-size: 15px;
+            color: #0f172a;
+        }}
+        .group-subtitle {{
+            font-size: 12px;
+            color: #64748b;
+            margin-left: auto;
+        }}
     </style>
 </head>
 <body>
@@ -393,25 +521,7 @@ class ReportGenerator:
         </div>
         
         <div id="correctos" class="tab-content">
-            <div class="table-responsive">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Proveedor No.</th>
-                            <th>Nombre Proveedor</th>
-                            <th>Sitio</th>
-                            <th>Campo Auditado</th>
-                            <th>Valor en Oracle</th>
-                            <th>Regla Esperada</th>
-                            <th>Tipo Control</th>
-                            <th>Nivel Riesgo</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filas_ok_html}
-                    </tbody>
-                </table>
-            </div>
+            {html_correctos}
         </div>
     </div>
 

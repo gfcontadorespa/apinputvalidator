@@ -503,7 +503,11 @@ class AuditoriaValidator:
                         print(f"⚠ Patrón regex inválido: {rule['REGEX_PATTERN']} - {e}")
     
     def _generar_lista_correctos(self):
-        """Genera la lista de registros que pasaron todas las validaciones"""
+        """Genera la lista de registros que pasaron todas las validaciones
+        Clasifica cada registro como:
+          - Creacion (header LAST_ACTION_VENDOR=C con sus sitios)
+          - Modificacion (sitio con LAST_ACTION=M)
+        """
         
         # Identificar qué entidades fallaron
         failed_headers = set()
@@ -516,17 +520,13 @@ class AuditoriaValidator:
             
             if s_code == 'HEADER':
                 if campo.startswith('VENDOR_SITE_CODE'):
-                    # Sin sitios asignados: todo el vendor falla
                     failed_headers.add(v_num)
                     failed_sites.add((v_num, 'ALL'))
                 elif campo == 'SITE_STATUS (PUR)':
-                    # Falta sitio PUR
                     failed_sites.add((v_num, 'PUR Site'))
                 elif campo == 'SITE_STATUS (PAY)':
-                    # Falta sitio PAY
                     failed_sites.add((v_num, 'PAY Site'))
                 else:
-                    # Otras validaciones de cabecera
                     failed_headers.add(v_num)
             elif s_code in ['PUR Site', 'PAY Site']:
                 failed_sites.add((v_num, s_code))
@@ -542,6 +542,11 @@ class AuditoriaValidator:
             v_number = str(header_row['VENDOR_NUMBER'].values[0]).strip()
             v_name = header_row['VENDOR_NAME'].values[0]
             
+            # Determinar si el header fue creado en este lote
+            last_action_vendor = str(header_row.get('LAST_ACTION_VENDOR', pd.Series([None])).values[0]).strip()
+            es_creacion = (last_action_vendor == 'C')
+            tipo_header = 'Creación' if es_creacion else 'Actualización'
+            
             # Verificar cabecera
             if v_number not in failed_headers:
                 self.lista_correctos.append({
@@ -552,7 +557,8 @@ class AuditoriaValidator:
                     'VALOR_ORACLE': '-',
                     'REGLA_ESPERADA': 'Cumple con todos los parámetros de cabecera',
                     'TIPO_CONTROL': 'Validación Correcta',
-                    'NIVEL_RIESGO': 'OK'
+                    'NIVEL_RIESGO': 'OK',
+                    'TIPO_ACCION': tipo_header
                 })
             
             # Verificar cada sitio
@@ -568,6 +574,10 @@ class AuditoriaValidator:
                 )
                 
                 if not sitio_fallo:
+                    # Determinar si el sitio fue modificado
+                    last_action = str(fila_sitio.get('LAST_ACTION', '')).strip()
+                    tipo_sitio = 'Modificación' if last_action == 'M' else tipo_header
+                    
                     self.lista_correctos.append({
                         'VENDOR_NUMBER': v_number,
                         'VENDOR_NAME': v_name,
@@ -576,8 +586,16 @@ class AuditoriaValidator:
                         'VALOR_ORACLE': '-',
                         'REGLA_ESPERADA': 'Cumple con todos los parámetros del sitio',
                         'TIPO_CONTROL': 'Validación Correcta',
-                        'NIVEL_RIESGO': 'OK'
+                        'NIVEL_RIESGO': 'OK',
+                        'TIPO_ACCION': tipo_sitio
                     })
+        
+        # Ordenar: primero Creaciones (header + sitios agrupados), luego Modificaciones
+        self.lista_correctos.sort(key=lambda x: (
+            0 if x.get('TIPO_ACCION') == 'Creación' else 1,
+            str(x.get('VENDOR_NUMBER', '')),
+            0 if x.get('VENDOR_SITE_CODE') == 'HEADER' else 1
+        ))
     
     def _agregar_excepcion(self, excepcion):
         """Agrega una excepción a la lista"""
